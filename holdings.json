@@ -1,0 +1,22 @@
+{
+  "funds": [
+    {
+      "code": "110011",
+      "name": "示例基金1",
+      "shares": 100,
+      "costPrice": 4.50,
+      "platform": "支付宝"
+    },
+    {
+      "code": "005827",
+      "name": "示例基金2",
+      "shares": 500,
+      "costPrice": 2.30,
+      "platform": "微信"
+    }
+  ],
+  "settings": {
+    "refreshIntervalSeconds": 30,
+    "port": 3456
+  }
+}
