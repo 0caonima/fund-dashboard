@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>基金收益看板</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d28;
+    --card-hover: #22263a;
+    --border: #2a2e3d;
+    --text: #e4e6eb;
+    --text-dim: #8b8fa3;
+    --red: #ef4444;
+    --red-bg: rgba(239,68,68,0.1);
+    --green: #22c55e;
+    --green-bg: rgba(34,197,94,0.1);
+    --accent: #6366f1;
+    --accent-bg: rgba(99,102,241,0.15);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .header { text-align: center; margin-bottom: 30px; }
+  .header h1 {
+    font-size: 28px; font-weight: 700;
+    background: linear-gradient(135deg, #6366f1, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .header .meta {
+    color: var(--text-dim); font-size: 13px;
+    display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap;
+  }
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; animation:pulse 2s infinite; }
+  .dot.live { background: var(--green); }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+  .summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px; margin-bottom: 30px; max-width: 1200px; margin-left: auto; margin-right: auto;
+  }
+  .summary-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px; text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .summary-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+  .summary-card .label { font-size:13px; color:var(--text-dim); margin-bottom:8px; }
+  .summary-card .value { font-size:24px; font-weight:700; }
+  .summary-card .sub { font-size:13px; margin-top:4px; }
+  .up { color: var(--red); }
+  .down { color: var(--green); }
+
+  .funds { max-width:1200px; margin:0 auto; }
+  .funds-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .funds-header h2 { font-size:18px; font-weight:600; }
+  .btn {
+    background: var(--accent-bg); color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 8px;
+    padding: 8px 16px; font-size:13px; cursor:pointer; transition:all 0.2s;
+  }
+  .btn:hover { background:var(--accent); color:#fff; }
+
+  .fund-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px; margin-bottom: 12px;
+    display: grid; grid-template-columns: 1fr auto auto auto;
+    align-items: center; gap: 20px; transition: background 0.2s;
+  }
+  .fund-card:hover { background: var(--card-hover); }
+  .fund-info .fund-name { font-size:16px; font-weight:600; margin-bottom:4px; }
+  .fund-info .fund-meta {
+    font-size:12px; color:var(--text-dim); display:flex; gap:12px; flex-wrap:wrap;
+  }
+  .platform-tag {
+    display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600;
+  }
+  .platform-tag.alipay { background:#1677ff22; color:#1677ff; border:1px solid #1677ff44; }
+  .platform-tag.wechat { background:#07c16022; color:#07c160; border:1px solid #07c16044; }
+
+  .fund-daily, .fund-total, .fund-value { text-align:right; }
+  .fund-daily .label, .fund-total .label, .fund-value .label {
+    font-size:11px; color:var(--text-dim); margin-bottom:4px;
+  }
+  .fund-daily .amount, .fund-total .amount { font-size:16px; font-weight:700; }
+  .fund-daily .rate, .fund-total .rate { font-size:12px; margin-top:2px; }
+  .fund-value .value { font-size:18px; font-weight:700; }
+  .fund-value .cost { font-size:12px; color:var(--text-dim); margin-top:2px; }
+
+  .fund-card.error { border-color:#f59e0b44; background:rgba(245,158,11,0.05); }
+  .fund-card.error .fund-name { color:#f59e0b; }
+
+  .modal-overlay {
+    display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+    background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;
+  }
+  .modal-overlay.active { display:flex; }
+  .modal {
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:28px; width:90%; max-width:700px; max-height:80vh; overflow-y:auto;
+  }
+  .modal h2 { margin-bottom:20px; font-size:20px; }
+  .modal table { width:100%; border-collapse:collapse; margin-bottom:16px; }
+  .modal th, .modal td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--border); font-size:13px; }
+  .modal th { color:var(--text-dim); font-weight:500; }
+  .modal input, .modal select {
+    background:var(--bg); border:1px solid var(--border); border-radius:6px;
+    color:var(--text); padding:6px 10px; font-size:13px; width:100%;
+  }
+  .modal input:focus, .modal select:focus { outline:none; border-color:var(--accent); }
+  .modal .actions { display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
+  .btn-primary {
+    background:var(--accent); color:#fff; border:none; border-radius:8px;
+    padding:10px 24px; font-size:14px; cursor:pointer;
+  }
+  .btn-secondary {
+    background:transparent; color:var(--text-dim); border:1px solid var(--border);
+    border-radius:8px; padding:10px 24px; font-size:14px; cursor:pointer;
+  }
+  .btn-danger {
+    background:var(--red-bg); color:var(--red); border:1px solid var(--red);
+    border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer;
+  }
+  .loading { text-align:center; padding:60px; color:var(--text-dim); }
+  .spinner {
+    width:32px; height:32px; border:3px solid var(--border);
+    border-top-color:var(--accent); border-radius:50%;
+    animation:spin 0.8s linear infinite; margin:0 auto 16px;
+  }
+  @keyframes spin { to{transform:rotate(360deg);} }
+
+  @media (max-width:768px) {
+    .fund-card { grid-template-columns:1fr 1fr; gap:12px; }
+    .fund-info { grid-column:1/-1; }
+    .fund-daily, .fund-total, .fund-value { text-align:left; }
+    .summary { grid-template-columns:repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📈 基金收益看板</h1>
+  <div class="meta">
+    <span><span class="dot live" id="statusDot"></span> <span id="statusText">实时刷新中</span></span>
+    <span id="updateTime">--</span>
+    <span id="countdown"></span>
+    <button class="btn" onclick="openModal()">⚙️ 管理持仓</button>
+    <button class="btn" onclick="refresh()" id="refreshBtn">🔄 刷新</button>
+  </div>
+</div>
+
+<div class="summary" id="summary"></div>
+
+<div class="funds">
+  <div class="funds-header"><h2>持仓明细</h2></div>
+  <div id="fundList"><div class="loading"><div class="spinner"></div>加载中...</div></div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2>⚙️ 管理持仓</h2>
+    <table>
+      <thead><tr><th>基金代码</th><th>持有份额</th><th>成本价</th><th>平台</th><th></th></tr></thead>
+      <tbody id="holdingsTable"></tbody>
+    </table>
+    <button class="btn" onclick="addRow()" style="margin-bottom:16px">+ 添加基金</button>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px">
+      💡 基金代码在支付宝/微信基金详情页查看。成本价=你的买入均价。份额=持有总份额。
+    </p>
+    <div class="actions">
+      <button class="btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn-primary" onclick="saveHoldings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let refreshTimer = null, countdownVal = 0;
+let settings = { refreshIntervalSeconds: 30 };
+
+async function fetchPortfolio() {
+  try { const r = await fetch('/api/portfolio'); return r.ok ? await r.json() : null; }
+  catch(e) { console.error(e); return null; }
+}
+
+async function refresh() {
+  const btn = document.getElementById('refreshBtn');
+  btn.textContent = '⏳ 刷新中...'; btn.disabled = true;
+  const data = await fetchPortfolio();
+  if (data) {
+    renderSummary(data.summary);
+    renderFunds(data.funds);
+    document.getElementById('updateTime').textContent = '更新于 ' + data.summary.updateTime;
+  } else {
+    document.getElementById('fundList').innerHTML = '<div class="loading" style="color:var(--red)">❌ 获取数据失败</div>';
+  }
+  btn.textContent = '🔄 刷新'; btn.disabled = false;
+  startCountdown();
+}
+
+function startCountdown() {
+  clearInterval(refreshTimer);
+  countdownVal = settings.refreshIntervalSeconds || 30;
+  document.getElementById('countdown').textContent = countdownVal + 's';
+  refreshTimer = setInterval(() => {
+    countdownVal--;
+    document.getElementById('countdown').textContent = countdownVal + 's';
+    if (countdownVal <= 0) refresh();
+  }, 1000);
+}
+
+function renderSummary(s) {
+  const gc = s.totalGain >= 0 ? 'up' : 'down';
+  const dc = s.totalDailyGain >= 0 ? 'up' : 'down';
+  const sign = v => v >= 0 ? '+' : '';
+  document.getElementById('summary').innerHTML = `
+    <div class="summary-card"><div class="label">总资产</div>
+      <div class="value">¥${fmt(s.totalCurrent)}</div>
+      <div class="sub" style="color:var(--text-dim)">成本 ¥${fmt(s.totalCost)}</div></div>
+    <div class="summary-card"><div class="label">总盈亏</div>
+      <div class="value ${gc}">${sign(s.totalGain)}¥${fmt(Math.abs(s.totalGain))}</div>
+      <div class="sub ${gc}">${sign(s.totalGainRate)}${s.totalGainRate}%</div></div>
+    <div class="summary-card"><div class="label">今日预估收益</div>
+      <div class="value ${dc}">${sign(s.totalDailyGain)}¥${fmt(Math.abs(s.totalDailyGain))}</div>
+      <div class="sub ${dc}">${sign(s.totalDailyGainRate)}${s.totalDailyGainRate}%</div></div>
+    <div class="summary-card"><div class="label">持仓基金</div>
+      <div class="value">${s.fundCount}</div>
+      <div class="sub" style="color:var(--text-dim)">${s.errorCount > 0 ? s.errorCount + ' 只获取失败' : '全部正常'}</div></div>`;
+}
+
+function renderFunds(funds) {
+  const c = document.getElementById('fundList');
+  if (!funds || !funds.length) { c.innerHTML = '<div class="loading">暂无持仓，点击「管理持仓」添加</div>'; return; }
+  c.innerHTML = funds.map(f => {
+    if (f.error) return `<div class="fund-card error"><div class="fund-info"><div class="fund-name">⚠️ ${f.name||f.code}</div><div class="fund-meta"><span>${f.code}</span><span style="color:var(--red)">${f.error}</span></div></div></div>`;
+    const dc = f.dailyGain >= 0 ? 'up' : 'down', tc = f.totalGain >= 0 ? 'up' : 'down';
+    const sign = v => v >= 0 ? '+' : '';
+    const pc = f.platform === '支付宝' ? 'alipay' : 'wechat';
+    const pi = f.platform === '支付宝' ? '🔵' : '🟢';
+    return `<div class="fund-card">
+      <div class="fund-info">
+        <div class="fund-name">${f.name}</div>
+        <div class="fund-meta"><span>${f.code}</span><span><span class="platform-tag ${pc}">${pi} ${f.platform}</span></span><span>${f.shares} 份</span></div>
+      </div>
+      <div class="fund-daily"><div class="label">今日预估</div><div class="amount ${dc}">${sign(f.dailyGain)}¥${fmt(Math.abs(f.dailyGain))}</div><div class="rate ${dc}">${sign(f.estimateRate)}${f.estimateRate}%</div></div>
+      <div class="fund-total"><div class="label">累计盈亏</div><div class="amount ${tc}">${sign(f.totalGain)}¥${fmt(Math.abs(f.totalGain))}</div><div class="rate ${tc}">${sign(f.totalGainRate)}${f.totalGainRate}%</div></div>
+      <div class="fund-value"><div class="value">¥${fmt(f.currentValue)}</div><div class="cost">成本 ¥${fmt(f.costValue)}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function fmt(n) { return Number(n).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+async function openModal() {
+  const r = await fetch('/api/holdings');
+  const d = await r.json();
+  settings = d.settings || { refreshIntervalSeconds: 30 };
+  const tb = document.getElementById('holdingsTable'); tb.innerHTML = '';
+  (d.funds||[]).forEach(f => addRowWithData(f));
+  document.getElementById('modalOverlay').classList.add('active');
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
+function addRow() { addRowWithData({code:'',shares:'',costPrice:'',platform:'支付宝',name:''}); }
+function addRowWithData(f) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td><input placeholder="如 110011" value="${f.code||''}"></td>
+    <td><input type="number" step="0.01" placeholder="份额" value="${f.shares||''}"></td>
+    <td><input type="number" step="0.0001" placeholder="成本价" value="${f.costPrice||''}"></td>
+    <td><select><option ${f.platform==='支付宝'?'selected':''}>支付宝</option><option ${f.platform==='微信'?'selected':''}>微信</option></select></td>
+    <td><button class="btn-danger" onclick="this.closest('tr').remove()">删除</button></td>`;
+  document.getElementById('holdingsTable').appendChild(tr);
+}
+async function saveHoldings() {
+  const rows = document.querySelectorAll('#holdingsTable tr'), funds = [];
+  rows.forEach(tr => {
+    const inp = tr.querySelectorAll('input'), sel = tr.querySelector('select');
+    if (inp[0].value.trim()) funds.push({ code:inp[0].value.trim(), shares:parseFloat(inp[1].value)||0, costPrice:parseFloat(inp[2].value)||0, platform:sel.value, name:'' });
+  });
+  const r = await fetch('/api/holdings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({funds, settings}) });
+  if (r.ok) { closeModal(); refresh(); } else alert('保存失败');
+}
+
+refresh();
+</script>
+</body>
+</html>
